@@ -1,64 +1,49 @@
 import json
-import os
-import statistics
-from http.server import BaseHTTPRequestHandler
+import math
+from flask import Flask, request, jsonify
 
-# Load the JSON bundle once at startup
-DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'q-vercel-latency.json')
-with open(DATA_PATH) as f:
-    RAW_DATA = json.load(f)
+app = Flask(__name__)
 
-# RAW_DATA is expected to be a list of records like:
-# {"region": "amer", "latency_ms": 120, "uptime": 0.99}
+with open("q-vercel-latency.json", "r", encoding="utf-8") as f:
+    DATA = json.load(f)
 
+def p95(values):
+    vals = sorted(values)
+    if not vals:
+        return None
+    idx = math.ceil(0.95 * len(vals)) - 1
+    return vals[idx]
 
-def compute_metrics(records, threshold_ms):
-    latencies = [r["latency_ms"] for r in records]
-    uptimes   = [r["uptime"] for r in records]
-    avg_latency  = statistics.mean(latencies)
-    p95_latency  = sorted(latencies)[int(len(latencies) * 0.95)]
-    avg_uptime   = statistics.mean(uptimes)
-    breaches     = sum(1 for l in latencies if l > threshold_ms)
-    return {
-        "avg_latency": avg_latency,
-        "p95_latency": p95_latency,
-        "avg_uptime":  avg_uptime,
-        "breaches":    breaches,
-    }
+@app.after_request
+def add_cors_headers(resp):
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
 
+@app.route("/api/latency", methods=["POST", "OPTIONS"])
+def latency():
+    if request.method == "OPTIONS":
+        return ("", 200)
 
-class handler(BaseHTTPRequestHandler):
+    payload = request.get_json(force=True)
+    regions = payload.get("regions", [])
+    threshold_ms = payload.get("threshold_ms", 180)
 
-    def do_OPTIONS(self):
-        self._send_cors_headers(200)
+    result = {}
+    for region in regions:
+        rows = [r for r in DATA if r.get("region") == region]
+        latencies = [r["latency_ms"] for r in rows]
+        uptimes = [r["uptime"] for r in rows]
 
-    def do_POST(self):
-        length  = int(self.headers.get("Content-Length", 0))
-        body    = self.rfile.read(length)
-        payload = json.loads(body)
+        result[region] = {
+            "avg_latency": (sum(latencies) / len(latencies)) if latencies else None,
+            "p95_latency": p95(latencies) if latencies else None,
+            "avg_uptime": (sum(uptimes) / len(uptimes)) if uptimes else None,
+            "breaches": sum(1 for x in latencies if x > threshold_ms),
+        }
 
-        regions      = payload.get("regions", [])
-        threshold_ms = payload.get("threshold_ms", 180)
+    return jsonify(result)
 
-        result = {}
-        for region in regions:
-            records = [r for r in RAW_DATA if r["region"] == region]
-            if records:
-                result[region] = compute_metrics(records, threshold_ms)
-            else:
-                result[region] = None
-
-        response = json.dumps(result).encode()
-        self._send_cors_headers(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(response)))
-        self.end_headers()
-        self.wfile.write(response)
-
-    def _send_cors_headers(self, code):
-        self.send_response(code)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        if code != 200:
-            self.end_headers()
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

@@ -1,9 +1,0 @@
-<<<<<<< HEAD
-fastapi
-uvicorn[standard]
-google-genai
-pydantic
-=======
-flask
-gunicorn
->>>>>>> e8a907c0e61aa1b33000e20e1e49fac06e7cc64c

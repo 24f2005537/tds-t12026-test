@@ -31,8 +31,9 @@ def analyze_error_with_ai(code: str, traceback: str) -> List[int]:
     prompt = f"""Analyze this Python code and its error traceback.
 Identify the line number(s) where the error occurred.
 CODE:\n{code}\nTRACEBACK:\n{traceback}\nReturn the line number(s) where the error is located."""
+    MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     response = client.models.generate_content(
-        model="gemini-2.0-flash-exp",
+        model=MODEL_NAME,
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

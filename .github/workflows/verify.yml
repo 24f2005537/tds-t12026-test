@@ -1,0 +1,21 @@
+name: Email Verification Action
+
+# This triggers the action automatically when you commit, 
+# and also allows you to run it manually from the UI.
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      # Here is your required step with the email
+      - name: 24f2005537@ds.study.iitm.ac.in
+        run: echo "Hello, world! This action is working."
